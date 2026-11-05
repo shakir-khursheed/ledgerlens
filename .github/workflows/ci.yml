@@ -1,1 +1,15 @@
-# placeholder
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -q
+      # The rules-only arm needs no credentials, so the safety invariant
+      # (zero adjustments proposed over missing or held money) is enforced
+      # on every push. A non-zero exit here fails the build.
+      - run: python -m ledgerlens eval --wild 0.5 --reasoner policy
