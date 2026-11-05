@@ -1,0 +1,20 @@
+[project]
+name = "ledgerlens"
+version = "0.1.0"
+description = "An agent that explains payment settlement reconciliation breaks, and an eval harness that says when it should not be trusted."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+llm = ["claude-agent-sdk>=0.2"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+ledgerlens = "ledgerlens.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
