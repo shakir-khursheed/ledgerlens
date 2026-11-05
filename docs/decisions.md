@@ -45,9 +45,17 @@ measure, and it is the entire business case for the model arm.
 **Why.** Python's banker's rounding on GST generates phantom breaks — the exact
 thing this tool exists to eliminate. Pinned by a test.
 
+## 7. Answered: does the model arm earn its cost?
+**Measured.** On 40 breaks scored for both arms, Claude reached 86.7% on
+held-out shapes against the rules' 20.0% on the same subset, with zero unsafe
+adjustments. The sample is weighted toward rules failures on purpose, since
+that is the only region where a model can add anything. Average 5.8 tool calls
+and 58s per break, which is why the shipping shape routes rules first.
+
 ## Open questions
-- Does the model arm actually beat 42% on the wild split, and on which families?
-  The harness is built to answer this; it needs a credentialed run.
+- The model's weak family is sub-rupee drift: it over-calls GST rounding on FX
+  and late-settlement breaks. That is a prompt and tool problem (it cannot see
+  the FX rate's own rounding behaviour), not a model-capability one.
 - Confidence is hand-assigned in the rules arm. It should be calibrated against
   observed analyst overturn rates once there are any.
 - Multi-payment settlement rows (one bank credit covering many captures) are

@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LedgerLens — break explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a ruled statement column. Bands split by hairlines, figures in mono,
+   nothing centred. Chart marks use the validated blue/orange categorical pair;
+   the teal is UI accent only and never encodes data. */
+:root{
+  --paper:#f7f8f9; --card:#fff; --ink:#121820; --ink-soft:#5a6672; --ink-faint:#8c97a3;
+  --rule:#dde2e7; --accent:#0f5f6b; --good:#14706a; --bad:#a33a2a;
+  --series-rules:#eb6834; --series-claude:#2a78d6;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0d1115; --card:#141a21; --ink:#e7ecf1; --ink-soft:#9aa7b3; --ink-faint:#6f7c89;
+  --rule:#242d36; --accent:#5fc6cf; --good:#4fb3a6; --bad:#e08270;
+  --series-rules:#d95926; --series-claude:#3987e5; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --paper:#0d1115; --card:#141a21; --ink:#e7ecf1; --ink-soft:#9aa7b3; --ink-faint:#6f7c89;
+  --rule:#242d36; --accent:#5fc6cf; --good:#4fb3a6; --bad:#e08270;
+  --series-rules:#d95926; --series-claude:#3987e5; color-scheme:dark;}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+     font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1020px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));
+      padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.018em}
+h1{font-size:clamp(1.9rem,5vw,2.6rem);font-weight:600;line-height:1.08}
+h2{font-size:1.2rem;font-weight:600}
+h3{font-size:.95rem;font-weight:600}
+p{margin:0}
+a{color:var(--accent)}
+.eyebrow{font-family:var(--mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft)}
+section{padding-block:2.2rem;border-top:1px solid var(--rule);display:flex;flex-direction:column;gap:1rem}
+header{padding-block:2.8rem 2rem;display:flex;flex-direction:column;gap:.9rem}
+.sub{color:var(--ink-soft);max-width:64ch}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:.4rem}
+.chip{font-family:var(--mono);font-size:.72rem;padding:.24rem .5rem;border:1px solid var(--rule);
+      border-radius:3px;color:var(--ink-soft);background:var(--card)}
+
+/* head to head */
+.h2h{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1px;
+     background:var(--rule);border:1px solid var(--rule);border-radius:4px;overflow:hidden}
+.h2h .cell{background:var(--card);padding:1rem;display:flex;flex-direction:column;gap:.7rem;min-width:0}
+.cmp{display:flex;flex-direction:column;gap:.5rem}
+.barrow{display:grid;grid-template-columns:4.6rem 1fr auto;gap:.55rem;align-items:center}
+.barrow .who{font-size:.8rem;color:var(--ink-soft)}
+.track{height:10px;background:var(--rule);border-radius:5px;overflow:hidden;min-width:0}
+.fill{height:100%;border-radius:5px}
+.barrow .val{font-family:var(--mono);font-size:.82rem;font-variant-numeric:tabular-nums}
+.legend{display:flex;gap:.9rem;font-size:.78rem;color:var(--ink-soft);flex-wrap:wrap}
+.key{display:inline-flex;align-items:center;gap:.35rem}
+.swatch{width:10px;height:10px;border-radius:2px;display:inline-block}
+.big{font-family:var(--mono);font-size:1.9rem;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.note{font-size:.84rem;color:var(--ink-soft)}
+
+/* controls + table */
+.controls{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+select,button{font-family:var(--sans);font-size:.84rem;color:var(--ink);background:var(--card);
+  border:1px solid var(--rule);border-radius:4px;padding:.35rem .55rem}
+button{cursor:pointer}
+button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent)}
+.tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:4px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-size:.86rem;min-width:620px}
+th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--rule);vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+thead th{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;
+         color:var(--ink-soft);font-weight:500;white-space:nowrap}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+tbody tr[aria-selected="true"]{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.tag{font-family:var(--mono);font-size:.7rem;padding:.1rem .35rem;border-radius:3px;border:1px solid var(--rule);white-space:nowrap}
+.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,var(--rule))}
+.no{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--rule))}
+.muted{color:var(--ink-faint)}
+.good-num{color:var(--good)}
+.bad-num{color:var(--bad);font-weight:600}
+
+/* detail */
+.detail{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:1px;
+        background:var(--rule);border:1px solid var(--rule);border-radius:4px;overflow:hidden}
+.pane{background:var(--card);padding:1rem;display:flex;flex-direction:column;gap:.6rem;min-width:0}
+dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:.25rem .8rem;font-size:.85rem}
+dt{color:var(--ink-soft)}
+dd{margin:0;font-family:var(--mono);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.verdict{font-size:.9rem}
+.why{font-size:.87rem;color:var(--ink)}
+.toolline{font-family:var(--mono);font-size:.74rem;color:var(--ink-soft);overflow-wrap:anywhere}
+.empty{color:var(--ink-soft);font-size:.88rem}
+footer{border-top:1px solid var(--rule);padding-block:1.6rem 3rem;color:var(--ink-soft);font-size:.84rem;
+       display:flex;flex-direction:column;gap:.4rem}
+@media (max-width:560px){table{min-width:520px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <span class="eyebrow">Settlement operations · live output</span>
+  <h1>LedgerLens break explorer</h1>
+  <p class="sub">Every figure and decision on this page came out of a real run of
+    the code in the repository — the rules arm and the Claude arm on the same
+    batch of reconciliation breaks. Nothing here is mocked up.</p>
+  <div class="chips" id="meta"></div>
+</header>
+
+<section>
+  <span class="eyebrow">Head to head</span>
+  <h2 id="h2h-title">Rules vs Claude, on the breaks both arms saw</h2>
+  <div class="h2h" id="h2h"></div>
+  <p class="note" id="h2h-note"></p>
+</section>
+
+<section>
+  <span class="eyebrow">Rules arm across conditions</span>
+  <h2>What happens as unseen break shapes increase</h2>
+  <div class="controls">
+    <label for="seed">Seed</label><select id="seed"></select>
+    <span class="muted">·</span>
+    <span class="note">600 payments per batch, rules arm only</span>
+  </div>
+  <div class="tablewrap">
+    <table id="grid">
+      <thead><tr>
+        <th>Unseen shapes</th><th class="num">Auto-matched</th><th class="num">Breaks</th>
+        <th class="num">Accuracy</th><th class="num">Held-out</th>
+        <th class="num">To a human</th><th class="num">Unsafe</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="note">Accuracy falls as the batch fills with shapes the rules were
+    never written for — and the share routed to a human rises to match. That is
+    the system failing in the direction it is supposed to.</p>
+</section>
+
+<section>
+  <span class="eyebrow">Explorer</span>
+  <h2>Open any break and see what each arm did</h2>
+  <div class="controls">
+    <label for="family">Family</label><select id="family"></select>
+    <button id="f-wild" aria-pressed="false">Held-out only</button>
+    <button id="f-wrong" aria-pressed="false">Rules got it wrong</button>
+    <button id="f-sample" aria-pressed="true">Claude judged it</button>
+    <span class="note mono" id="count"></span>
+  </div>
+  <div class="tablewrap">
+    <table id="breaks">
+      <thead><tr>
+        <th>Break</th><th>Truth</th><th class="num">Delta (paise)</th>
+        <th>Rules said</th><th>Claude said</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="detail" id="detail"></div>
+</section>
+
+<footer>
+  <p>Settlement files cannot go in a public repo, so the batch is generated — but the
+    break families and their frequencies are the ones ops analysts see. Swap the
+    generator for a real file loader and nothing downstream changes.</p>
+  <p id="src"></p>
+</footer>
+</div>
+
+<script>
+const FAMILY_LABEL = {
+  clean:"clean", fee_schedule_delta:"legacy rate card", gst_rounding:"GST rounding",
+  t_plus_delay:"late settlement", partial_refund_netted:"refund netted",
+  chargeback_withheld:"chargeback held", duplicate_bank_row:"duplicate credit",
+  split_settlement:"split batch", fx_rounding:"FX rounding",
+  missing_in_bank:"never settled", unknown:"unresolved"
+};
+const label = k => FAMILY_LABEL[k] || k;
+const pct = x => (x*100).toFixed(1) + "%";
+const rupees = p => (p/100).toLocaleString("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:2});
+
+let DATA = null, state = {wild:false, wrong:false, sample:true, family:"", selected:null};
+
+fetch("data.json").then(r => r.json()).then(d => { DATA = d; boot(); })
+  .catch(() => {
+    document.getElementById("h2h").innerHTML =
+      '<div class="cell"><p class="empty">data.json could not be loaded. ' +
+      'Serve this folder over HTTP rather than opening the file directly.</p></div>';
+  });
+
+function boot(){
+  const b = DATA.batch;
+  document.getElementById("meta").innerHTML = [
+    `${b.n} payments`, `seed ${b.seed}`, `${pct(b.wild_rate)} unseen shapes`,
+    `${b.auto_matched} auto-matched`, `${b.breaks} breaks`, DATA.model, DATA.generated_at
+  ].map(t => `<span class="chip">${t}</span>`).join("");
+  document.getElementById("src").textContent =
+    "Generated by scripts/export_demo.py · " + DATA.generated_at;
+  renderH2H();
+  renderGridControls();
+  renderFilters();
+  renderBreaks();
+}
+
+function bar(who, value, color){
+  return `<div class="barrow"><span class="who">${who}</span>
+    <span class="track"><span class="fill" style="width:${Math.max(2,value*100).toFixed(1)}%;background:${color}"></span></span>
+    <span class="val">${pct(value)}</span></div>`;
+}
+
+function renderH2H(){
+  const h = DATA.head_to_head, el = document.getElementById("h2h");
+  if (!h || !h.sample_size){
+    el.innerHTML = '<div class="cell"><p class="empty">The Claude arm has not been run for this export yet.</p></div>';
+    document.getElementById("h2h-title").textContent = "Rules arm only";
+    return;
+  }
+  const legend = `<div class="legend">
+    <span class="key"><span class="swatch" style="background:var(--series-rules)"></span>Rules</span>
+    <span class="key"><span class="swatch" style="background:var(--series-claude)"></span>Claude</span></div>`;
+  el.innerHTML = `
+    <div class="cell">
+      <h3>Accuracy on held-out shapes</h3>
+      <div class="cmp">
+        ${bar("Rules", h.rules_accuracy_wild, "var(--series-rules)")}
+        ${bar("Claude", h.claude_accuracy_wild, "var(--series-claude)")}
+      </div>
+      ${legend}
+      <p class="note">${h.wild_in_sample} breaks whose shape no rule was written for.</p>
+    </div>
+    <div class="cell">
+      <h3>Accuracy on the whole sample</h3>
+      <div class="cmp">
+        ${bar("Rules", h.rules_accuracy, "var(--series-rules)")}
+        ${bar("Claude", h.claude_accuracy, "var(--series-claude)")}
+      </div>
+      ${legend}
+      <p class="note">${h.sample_size} breaks, weighted toward the ones rules struggle with.</p>
+    </div>
+    <div class="cell">
+      <h3>Adjustments proposed over missing or held money</h3>
+      <p class="big" style="color:${h.claude_unsafe.length ? "var(--bad)" : "var(--good)"}">${h.claude_unsafe.length}</p>
+      <p class="note">The release-blocking metric. Must be zero.</p>
+      <dl>
+        <dt>Avg tool calls</dt><dd>${h.avg_tool_calls}</dd>
+        <dt>Avg per break</dt><dd>${h.avg_seconds}s</dd>
+      </dl>
+    </div>`;
+  document.getElementById("h2h-note").textContent =
+    "Both arms were scored on exactly the same breaks. The sample is deliberately "
+    + "weighted toward break shapes the rules fail on, because that is the only "
+    + "place a model can earn its cost — the rules already close the rest for free.";
+}
+
+function renderGridControls(){
+  const seeds = [...new Set(DATA.grid.map(g => g.seed))];
+  const sel = document.getElementById("seed");
+  sel.innerHTML = seeds.map(s => `<option value="${s}">${s}</option>`).join("");
+  sel.onchange = renderGrid;
+  renderGrid();
+}
+
+function renderGrid(){
+  const seed = Number(document.getElementById("seed").value);
+  const rows = DATA.grid.filter(g => g.seed === seed)
+    .sort((a,b) => a.wild_rate - b.wild_rate).map(g => `
+      <tr>
+        <td class="mono">${pct(g.wild_rate)}</td>
+        <td class="num">${pct(g.auto_match_rate)}</td>
+        <td class="num">${g.breaks}</td>
+        <td class="num">${pct(g.accuracy)}</td>
+        <td class="num">${g.wild_accuracy == null ? "—" : pct(g.wild_accuracy)}</td>
+        <td class="num">${pct(g.human_queue_rate)}</td>
+        <td class="num ${g.unsafe_actions.length ? "bad-num" : "good-num"}">${g.unsafe_actions.length}</td>
+      </tr>`).join("");
+  document.querySelector("#grid tbody").innerHTML = rows;
+}
+
+function renderFilters(){
+  const fams = [...new Set(DATA.breaks.map(b => b.truth))].sort();
+  document.getElementById("family").innerHTML =
+    '<option value="">All families</option>' +
+    fams.map(f => `<option value="${f}">${label(f)}</option>`).join("");
+  document.getElementById("family").onchange = e => { state.family = e.target.value; renderBreaks(); };
+  const toggle = (id, key) => {
+    const el = document.getElementById(id);
+    el.onclick = () => { state[key] = !state[key]; el.setAttribute("aria-pressed", String(state[key])); renderBreaks(); };
+  };
+  toggle("f-wild","wild"); toggle("f-wrong","wrong"); toggle("f-sample","sample");
+}
+
+function visible(){
+  return DATA.breaks.filter(b =>
+    (!state.wild   || b.wild) &&
+    (!state.sample || b.in_sample) &&
+    (!state.wrong  || b.rules.category !== b.truth) &&
+    (!state.family || b.truth === state.family));
+}
+
+function verdictTag(said, truth){
+  if (!said) return '<span class="tag muted">not judged</span>';
+  if (said.error) return '<span class="tag no">error</span>';
+  const hit = said.category === truth;
+  return `<span class="tag ${hit ? "ok" : "no"}">${label(said.category)}</span>`;
+}
+
+function renderBreaks(){
+  const rows = visible();
+  document.getElementById("count").textContent = `${rows.length} shown`;
+  document.querySelector("#breaks tbody").innerHTML = rows.map(b => `
+    <tr data-id="${b.break_id}" aria-selected="${state.selected === b.break_id}">
+      <td class="mono">${b.payment_id}${b.wild ? ' <span class="tag">held-out</span>' : ""}</td>
+      <td>${label(b.truth)}</td>
+      <td class="num">${b.delta_paise.toLocaleString("en-IN")}</td>
+      <td>${verdictTag(b.rules, b.truth)}</td>
+      <td>${verdictTag(b.claude, b.truth)}</td>
+    </tr>`).join("") || '<tr><td colspan="5" class="empty">No breaks match these filters.</td></tr>';
+  document.querySelectorAll("#breaks tbody tr[data-id]").forEach(tr => {
+    tr.onclick = () => { state.selected = tr.dataset.id; renderBreaks(); renderDetail(); };
+  });
+  if (!rows.some(b => b.break_id === state.selected)) {
+    state.selected = rows.length ? rows[0].break_id : null;
+  }
+  renderDetail();
+}
+
+function armPane(title, d, truth, color){
+  if (!d) return `<div class="pane"><h3>${title}</h3><p class="empty">This break was not sent to the model.</p></div>`;
+  if (d.error) return `<div class="pane"><h3>${title}</h3><p class="empty">${d.error}</p></div>`;
+  const hit = d.category === truth;
+  return `<div class="pane">
+    <h3><span class="swatch" style="background:${color}"></span> ${title}</h3>
+    <p class="verdict"><span class="tag ${hit ? "ok" : "no"}">${label(d.category)}</span>
+      <span class="note">confidence ${d.confidence.toFixed(2)}${d.needs_human ? " · escalated" : ""}</span></p>
+    <p class="why">${d.explanation || ""}</p>
+    <dl>
+      <dt>Proposed adjustment</dt><dd>${d.proposed_adjustment_paise ? rupees(d.proposed_adjustment_paise) : "none"}</dd>
+      <dt>Tool calls</dt><dd>${d.tool_calls}</dd>
+    </dl>
+    ${(d.evidence && d.evidence.length) ? `<p class="toolline">${d.evidence.join(" · ")}</p>` : ""}
+    ${d.tools_called ? `<p class="toolline">called: ${[...new Set(d.tools_called)].join(", ")}</p>` : ""}
+  </div>`;
+}
+
+function renderDetail(){
+  const el = document.getElementById("detail");
+  const b = DATA.breaks.find(x => x.break_id === state.selected);
+  if (!b){ el.innerHTML = '<div class="pane"><p class="empty">Select a break above.</p></div>'; return; }
+  const rows = b.rows.map(r => `
+    <tr><td class="mono">${r.row_id}</td><td class="mono">${r.utr}</td>
+        <td class="mono">${r.settled_on}</td><td class="num">${r.net_paise.toLocaleString("en-IN")}</td></tr>`).join("")
+    || '<tr><td colspan="4" class="empty">No settlement row references this payment.</td></tr>';
+  el.innerHTML = `
+    <div class="pane">
+      <h3>${b.payment_id}</h3>
+      <dl>
+        <dt>Truth</dt><dd>${label(b.truth)}${b.wild ? " (held-out shape)" : ""}</dd>
+        <dt>Captured</dt><dd>${b.payment.captured_on}</dd>
+        <dt>Amount</dt><dd>${rupees(b.payment.amount_paise)}</dd>
+        <dt>Method</dt><dd>${b.payment.method}</dd>
+        <dt>Status</dt><dd>${b.payment.status}</dd>
+        <dt>Expected net</dt><dd>${b.expected_net_paise.toLocaleString("en-IN")}p</dd>
+        <dt>Observed net</dt><dd>${b.observed_net_paise.toLocaleString("en-IN")}p</dd>
+        <dt>Delta</dt><dd>${b.delta_paise.toLocaleString("en-IN")}p</dd>
+      </dl>
+      <p class="note">${b.note}</p>
+      <div class="tablewrap"><table style="min-width:0">
+        <thead><tr><th>Row</th><th>UTR</th><th>Settled</th><th class="num">Net</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+    </div>
+    ${armPane("Rules arm", b.rules, b.truth, "var(--series-rules)")}
+    ${armPane("Claude arm", b.claude, b.truth, "var(--series-claude)")}`;
+}
+</script>
+</body>
+</html>
