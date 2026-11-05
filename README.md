@@ -11,6 +11,10 @@ repetitive, and the one place where a careless auto-fix quietly loses money.
 
 LedgerLens does the pulling and the writing down. It never moves money.
 
+**[Open the live break explorer →](https://shakir-khursheed.github.io/ledgerlens/)**
+Real output from this code: both arms on the same batch, every tool call and
+decision inspectable.
+
 ```
 ┌────────────────┐   ~50% closed, zero cost
 │ settlement file│──────────────────────────────▶ matched
@@ -52,6 +56,7 @@ LedgerLens does the pulling and the writing down. It never moves money.
 | **adjustments proposed over missing or held money** | **0** | **0** |
 
 Reproduce: `make demo`. Full per-family table and a JSONL audit trail: `make eval`.
+Regenerate the live explorer's data, both arms: `python scripts/export_demo.py`.
 
 That 100% in the first column is not a brag — it is the warning. A hand-written
 rule table scores 100% against a test set built by the same person who wrote the
@@ -61,9 +66,39 @@ net of its own MDR, a credit re-issued under a fresh UTR, a capture split three
 ways. Those shapes arrive every time a new bank, product or rate revision ships.
 
 So the honest reading is: **rules close half the file for free and handle every
-family you've already seen; the long tail is what you'd pay a model for.** That
-is exactly how `HybridReasoner` is wired — rules first, Claude only on what the
-rules shrug at (`--reasoner hybrid`), so cost tracks the tail and not the volume.
+family you've already seen; the long tail is what you'd pay a model for.**
+
+## Does the model actually earn its cost?
+
+Measured, not asserted. 40 breaks, scored for both arms on **exactly the same
+breaks**, Claude reached through the Agent SDK with the read-only tools above:
+
+| | rules | Claude |
+|---|---|---|
+| accuracy on held-out shapes (30 breaks) | 20.0% | **86.7%** |
+| accuracy on the whole sample (40 breaks) | 40.0% | **85.0%** |
+| adjustments proposed over missing or held money | 0 | **0** |
+| avg tool calls per break | 5.3 | 5.8 |
+| avg wall clock per break | <1ms | 58s |
+
+Read the sample honestly: it is **deliberately weighted toward breaks the rules
+fail on** (30 of 40 are held-out shapes), because that is the only place a model
+can earn anything — the rules already close the rest for free and faster. The
+40% is the rules' score *on this hard subset*, not their 73.2% on a whole batch.
+
+What the model is doing on those cases is not magic, it is legwork. On a break
+the rules filed as unresolved, it pulled the payment, the settlement row and the
+rate card and concluded: *"Bank applied 310bp MDR (fee 75,774p) versus our
+current 200bp rate card (expected fee 48,866p). Need to verify correct rate with
+acquirer."* 310bp is in neither rate card we hold — which is exactly why no rule
+caught it, and exactly the thing an analyst would have had to work out by hand.
+
+So the shipping shape is `HybridReasoner`: rules first, model only on the
+residual (`--reasoner hybrid`). Cost tracks the tail, not the volume.
+
+**Try it:** [the live break explorer](https://shakir-khursheed.github.io/ledgerlens/)
+— every figure and decision there is real output from this code; click any break
+to see the tools each arm called and what it concluded.
 
 ## What it will never do
 
@@ -163,5 +198,10 @@ ledgerlens/
   agent.py        Claude Agent SDK arm + hybrid router + safety clamp
   evaluate.py     metrics, per-family breakdown, JSONL trace
   cli.py          python -m ledgerlens demo | eval
+scripts/
+  export_demo.py  runs both arms, exports docs/data.json
+docs/
+  index.html      the live break explorer (GitHub Pages)
+  decisions.md    decision log
 tests/            30 tests; safety invariant parametrised over seeds and noise
 ```
