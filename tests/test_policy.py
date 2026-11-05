@@ -50,3 +50,28 @@ def test_every_decision_carries_evidence():
     rep = run(generate(300, seed=9, wild_rate=0.4), decide, name="policy")
     assert all(d.evidence for d in rep.decisions)
     assert all(d.tool_calls > 0 for d in rep.decisions)
+
+
+def test_report_json_has_no_nan():
+    """NaN is not valid JSON -- a browser or a log pipeline chokes on it.
+
+    An undefined rate (no held-out breaks in the batch) must serialise as null.
+    """
+    import json
+
+    rep = run(generate(200, seed=4, wild_rate=0.0), decide, name="policy")
+    assert rep.to_json()["wild_accuracy"] is None
+    text = json.dumps(rep.to_json(), allow_nan=False)  # raises if any NaN slipped through
+    assert "NaN" not in text
+
+
+def test_cli_prints_a_batch_with_no_held_out_breaks():
+    """Regression: an undefined held-out rate is None, and None is not a float.
+
+    Making the JSON valid (null instead of NaN) broke the CLI's percent
+    formatting. Both paths are now pinned.
+    """
+    from ledgerlens.cli import main
+
+    assert main(["eval", "--n", "200", "--wild", "0.0"]) == 0
+    assert main(["eval", "--n", "200", "--wild", "0.0", "--json"]) == 0
