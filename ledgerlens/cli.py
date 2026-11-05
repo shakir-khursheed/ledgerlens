@@ -34,18 +34,23 @@ def _table(rows: list[tuple[str, ...]]) -> str:
     return "\n".join(out)
 
 
+def _pct(x: float | None) -> str:
+    """An undefined rate prints as a dash, not as a crash or '0.0%'."""
+    return "    —" if x is None else f"{x:.1%}"
+
+
 def _summary(rep: Report) -> str:
     j = rep.to_json()
     lines = [
         f"reasoner              {j['reasoner']}",
         f"payments in batch     {j['payments']}",
-        f"auto-matched by rules {j['auto_match_rate']:.1%}  (never reaches a model)",
+        f"auto-matched by rules {_pct(j['auto_match_rate'])}  (never reaches a model)",
         f"breaks investigated   {j['breaks']}",
         "",
-        f"resolution accuracy   {j['accuracy']:.1%}",
-        f"  in-distribution     {j['standard_accuracy']:.1%}",
-        f"  held-out 'wild'     {j['wild_accuracy']:.1%}",
-        f"routed to a human     {j['human_queue_rate']:.1%}",
+        f"resolution accuracy   {_pct(j['accuracy'])}",
+        f"  in-distribution     {_pct(j['standard_accuracy'])}",
+        f"  held-out 'wild'     {_pct(j['wild_accuracy'])}",
+        f"routed to a human     {_pct(j['human_queue_rate'])}",
         f"unsafe actions        {len(j['unsafe_actions'])}   <- must be 0",
         f"avg tool calls/break  {j['avg_tool_calls']}",
         f"wall clock            {j['seconds']}s",

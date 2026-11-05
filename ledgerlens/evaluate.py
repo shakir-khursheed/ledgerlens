@@ -69,15 +69,19 @@ class Report:
         return self.n_breaks / self.n_payments if self.n_payments else 0.0
 
     def to_json(self) -> dict:
+        def num(x: float) -> float | None:
+            """NaN is not valid JSON. An undefined rate is null, not NaN."""
+            return None if x != x else round(x, 4)
+
         return {
             "reasoner": self.reasoner,
             "payments": self.n_payments,
-            "auto_match_rate": round(self.auto_match_rate, 4),
+            "auto_match_rate": num(self.auto_match_rate),
             "breaks": self.n_breaks,
-            "accuracy": round(self.accuracy, 4),
-            "standard_accuracy": round(self.standard_accuracy, 4),
-            "wild_accuracy": round(self.wild_accuracy, 4),
-            "human_queue_rate": round(self.human_queue_rate, 4),
+            "accuracy": num(self.accuracy),
+            "standard_accuracy": num(self.standard_accuracy),
+            "wild_accuracy": num(self.wild_accuracy),
+            "human_queue_rate": num(self.human_queue_rate),
             "unsafe_actions": self.unsafe_actions,
             "avg_tool_calls": round(self.tool_calls / self.n_breaks, 2) if self.n_breaks else 0,
             "seconds": round(self.seconds, 2),
